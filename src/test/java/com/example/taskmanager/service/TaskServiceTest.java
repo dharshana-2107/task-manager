@@ -80,4 +80,17 @@ class TaskServiceTest {
 
         assertThat(service.countPending()).isEqualTo(1);
     }
+
+        @Test
+    void deletedIdIsNeverReused() {
+        Task first = service.create(new Task("First", null));
+        service.delete(first.getId());
+
+        Task second = service.create(new Task("Second", null));
+
+        assertThat(second.getId()).isEqualTo(2L);
+        assertThat(service.findAll())
+                .extracting(Task::getTitle)
+                .containsExactly("Second");
+    }
 }
