@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Task Manager</title>
+    <style>
+        :root { --bg:#f5f5f4; --card:#fff; --text:#1c1917; --muted:#78716c; --line:#e7e5e4; --accent:#0f766e; --danger:#b91c1c; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+        main { max-width: 640px; margin: 40px auto; padding: 0 16px; }
+        header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:20px; }
+        h1 { margin:0; font-size:1.6rem; }
+        #version { font-size:.8rem; color:var(--muted); font-family: ui-monospace, monospace; }
+        form { display:flex; flex-direction:column; gap:8px; background:var(--card); padding:16px; border:1px solid var(--line); border-radius:8px; }
+        input, textarea { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:6px; }
+        textarea { resize: vertical; min-height: 50px; }
+        button { font:inherit; cursor:pointer; border:none; border-radius:6px; padding:8px 14px; }
+        .primary { background:var(--accent); color:#fff; align-self:flex-end; }
+        #error { color:var(--danger); font-size:.9rem; min-height:1.2em; margin:0; }
+        .summary { color:var(--muted); font-size:.9rem; margin:20px 0 8px; }
+        ul { list-style:none; padding:0; margin:0; }
+        li { display:flex; gap:12px; align-items:flex-start; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:8px; }
+        li input[type=checkbox] { margin-top:4px; width:18px; height:18px; }
+        .body { flex:1; min-width:0; }
+        .title { font-weight:600; word-wrap:break-word; }
+        .desc { color:var(--muted); font-size:.9rem; margin-top:2px; word-wrap:break-word; }
+        li.done .title { text-decoration:line-through; color:var(--muted); }
+        .delete { background:transparent; color:var(--danger); padding:4px 8px; }
+        .empty { color:var(--muted); text-align:center; padding:24px; }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <h1>Task Manager</h1>
+        <span id="version"></span>
+    </header>
+
+    <form id="task-form">
+        <input id="title" placeholder="What needs doing?" maxlength="100" required>
+        <textarea id="description" placeholder="Details (optional)" maxlength="500"></textarea>
+        <p id="error"></p>
+        <button class="primary" type="submit">Add task</button>
+    </form>
+
+    <p class="summary" id="summary"></p>
+    <ul id="task-list"></ul>
+</main>
+
+<script>
+    const api = '/api/tasks';
+    const list = document.getElementById('task-list');
+    const errorEl = document.getElementById('error');
+
+    async function load() {
+        const tasks = await (await fetch(api)).json();
+        const pending = tasks.filter(t => !t.completed).length;
+        document.getElementById('summary').textContent =
+            tasks.length ? `${pending} pending · ${tasks.length - pending} done` : '';
+        list.innerHTML = '';
+        if (!tasks.length) {
+            list.innerHTML = '<li class="empty">No tasks yet. Add one above.</li>';
+            return;
+        }
+        for (const t of tasks) {
+            const li = document.createElement('li');
+            if (t.completed) li.classList.add('done');
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = t.completed;
+            cb.onchange = async () => { await fetch(`${api}/${t.id}/toggle`, { method: 'PATCH' }); load(); };
+
+            const body = document.createElement('div');
+            body.className = 'body';
+            const title = document.createElement('div');
+            title.className = 'title';
+            title.textContent = t.title;
+            body.appendChild(title);
+            if (t.description) {
+                const d = document.createElement('div');
+                d.className = 'desc';
+                d.textContent = t.description;
+                body.appendChild(d);
+            }
+
+            const del = document.createElement('button');
+            del.className = 'delete';
+            del.textContent = 'Delete';
+            del.onclick = async () => { await fetch(`${api}/${t.id}`, { method: 'DELETE' }); load(); };
+
+            li.append(cb, body, del);
+            list.appendChild(li);
+        }
+    }
+
+    document.getElementById('task-form').onsubmit = async (e) => {
+        e.preventDefault();
+        errorEl.textContent = '';
+        const res = await fetch(api, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: document.getElementById('title').value,
+                description: document.getElementById('description').value
+            })
+        });
+        if (!res.ok) {
+            errorEl.textContent = (await res.json()).error || 'Could not add task';
+            return;
+        }
+        e.target.reset();
+        load();
+    };
+
+    fetch('/api/info').then(r => r.json()).then(i => {
+        document.getElementById('version').textContent = 'version: ' + i.version;
+    });
+
+    load();
+</script>
+</body>
+</html>
