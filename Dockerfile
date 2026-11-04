@@ -1,24 +1,15 @@
-# ---- Stage 1: build the JAR ----
-FROM maven:3.9-eclipse-temurin-21 AS build
-WORKDIR /app
-
-# Copy pom first so dependency downloads are cached between builds
-COPY pom.xml .
-RUN mvn -B dependency:go-offline
-
-COPY src ./src
-# Tests run in the CI pipeline's own test stage, so skip them here
-RUN mvn -B package -DskipTests
-
-# ---- Stage 2: small runtime image ----
+# Packages the JAR that Maven already built and tested in the pipeline,
+# so the image contains exactly the tested artifact.
+# Locally: run `mvn package` first, then `docker build`.
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # Run as a non-root user
 RUN addgroup -S app && adduser -S app -G app
-USER app
 
-COPY --from=build /app/target/task-manager.jar app.jar
+COPY target/task-manager.jar app.jar
+
+USER app
 
 ENV PORT=8080
 EXPOSE 8080

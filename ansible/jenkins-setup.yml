@@ -1,0 +1,148 @@
+---
+# Configures an Ubuntu 24.04 EC2 instance as the Jenkins CI server.
+# Installs: Java 21, Maven, Git, Docker, Jenkins, AWS CLI v2, kubectl,
+# and the Python Kubernetes client used by deploy.yml.
+#
+# Run ON the EC2 instance (Ansible manages localhost):
+#   sudo apt update && sudo apt install -y ansible git
+#   git clone https://github.com/<you>/task-manager.git && cd task-manager
+#   sudo ansible-playbook -i ansible/inventory.ini ansible/jenkins-setup.yml
+#
+# Safe to re-run: every task is idempotent.
+
+- name: Configure Jenkins CI server
+  hosts: localhost
+  connection: local
+  become: true
+
+  vars:
+    # If apt reports a signature/key error, check https://pkg.jenkins.io/debian-stable/
+    # for the current key file name and update this URL.
+    jenkins_key_url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+    jenkins_keyring: /etc/apt/keyrings/jenkins-keyring.asc
+
+  tasks:
+    - name: Install base packages (Java 21, Maven, Git, Docker, Kubernetes Python client)
+      ansible.builtin.apt:
+        name:
+          - fontconfig
+          - openjdk-21-jdk
+          - maven
+          - git
+          - unzip
+          - curl
+          - ca-certificates
+          - docker.io
+          - python3-kubernetes
+        state: present
+        update_cache: true
+
+    - name: Make sure the apt keyrings folder exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Jenkins signing key
+      ansible.builtin.get_url:
+        url: "{{ jenkins_key_url }}"
+        dest: "{{ jenkins_keyring }}"
+        mode: "0644"
+
+    - name: Add Jenkins apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by={{ jenkins_keyring }}] https://pkg.jenkins.io/debian-stable binary/"
+        filename: jenkins
+        state: present
+
+    - name: Install Jenkins
+      ansible.builtin.apt:
+        name: jenkins
+        state: present
+        update_cache: true
+
+    - name: Let Jenkins run Docker commands
+      ansible.builtin.user:
+        name: jenkins
+        groups: docker
+        append: true
+      notify: Restart Jenkins
+
+    - name: Start Docker and Jenkins on boot
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - docker
+        - jenkins
+
+    - name: Check whether AWS CLI v2 is installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/aws
+      register: aws_cli
+
+    - name: Download AWS CLI v2
+      ansible.builtin.get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+        mode: "0644"
+      when: not aws_cli.stat.exists
+
+    - name: Unpack AWS CLI v2
+      ansible.builtin.unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: true
+      when: not aws_cli.stat.exists
+
+    - name: Install AWS CLI v2
+      ansible.builtin.command: /tmp/aws/install
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Find the latest stable kubectl version
+      ansible.builtin.uri:
+        url: https://dl.k8s.io/release/stable.txt
+        return_content: true
+      register: kubectl_stable
+
+    - name: Install kubectl (for manual checks; the pipeline itself uses Ansible)
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_stable.content | trim }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: "0755"
+
+    - name: Wait for Jenkins to create its first-login password
+      ansible.builtin.wait_for:
+        path: /var/lib/jenkins/secrets/initialAdminPassword
+        timeout: 180
+
+    - name: Read the first-login password
+      ansible.builtin.slurp:
+        src: /var/lib/jenkins/secrets/initialAdminPassword
+      register: jenkins_password
+
+    - name: Show tool versions
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - java -version
+        - mvn -version
+        - docker --version
+        - aws --version
+        - kubectl version --client
+        - ansible --version
+      register: versions
+      changed_when: false
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "Jenkins is running on port 8080"
+          - "First-login password: {{ jenkins_password.content | b64decode | trim }}"
+
+  handlers:
+    - name: Restart Jenkins
+      ansible.builtin.service:
+        name: jenkins
+        state: restarted

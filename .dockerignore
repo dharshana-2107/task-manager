@@ -1,7 +1,3 @@
-target/
-.git/
-.github/
-.idea/
-.vscode/
-*.iml
-README.md
+# Only the built JAR is needed in the Docker build context
+*
+!target/task-manager.jar

@@ -1,0 +1,31 @@
+# Amazon EKS cluster for task-manager.
+# Create:  eksctl create cluster -f eks/cluster.yaml      (about 15-20 minutes)
+# Delete:  eksctl delete cluster -f eks/cluster.yaml
+#
+# Kubernetes version is left unset on purpose so eksctl picks a current one.
+# Pinning an old version can push the cluster into EKS "extended support",
+# which costs several times more per hour.
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: task-manager-cluster
+  region: ap-south-1
+
+# Lets us grant the Jenkins IAM role access with EKS access entries
+accessConfig:
+  authenticationMode: API_AND_CONFIG_MAP
+
+# Worker nodes run in public subnets, so the (hourly-billed) NAT gateway isn't needed
+vpc:
+  nat:
+    gateway: Disable
+
+managedNodeGroups:
+  - name: workers
+    instanceType: t3.medium
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 2
+    volumeSize: 20
+    privateNetworking: false
