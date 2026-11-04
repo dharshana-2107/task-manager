@@ -18,7 +18,7 @@
   vars:
     # If apt reports a signature/key error, check https://pkg.jenkins.io/debian-stable/
     # for the current key file name and update this URL.
-    jenkins_key_url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+    jenkins_key_url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
     jenkins_keyring: /etc/apt/keyrings/jenkins-keyring.asc
 
   tasks:
