@@ -25,7 +25,7 @@ phase until the checkpoint passes. Region used throughout: **ap-south-1 (Mumbai)
 | Build & test          | Maven, JUnit 5                          | `pom.xml`, `src/test`         |
 | Containerization      | Docker                                  | `Dockerfile`                  |
 | Registry              | Amazon ECR                              | `Jenkinsfile`                 |
-| Orchestration         | Kubernetes on Amazon EKS                | `eks/cluster.yaml`, `ansible/templates/` |
+| Orchestration         | Kubernetes on Amazon EKS                | `eks/cluster.yaml`, `k8s/*.yaml` |
 | Configuration mgmt    | Ansible: sets up the Jenkins server     | `ansible/jenkins-setup.yml`   |
 | Deployment automation | Ansible: deploys to EKS + smoke test    | `ansible/deploy.yml`          |
 | CI/CD                 | Jenkins declarative pipeline            | `Jenkinsfile`                 |
@@ -284,7 +284,7 @@ kubectl get pods,svc -n task-manager
 ### Demo B: a failing test blocks deployment
 1. In `TaskServiceTest.deletedIdIsNeverReused`, change `isEqualTo(2L)` to `isEqualTo(1L)`.
 2. Commit and push.
-3. Jenkins fails at **Build & Test**; Docker, ECR and Deploy stages are skipped; the live site still
+3. Jenkins fails at **3. Test (JUnit)**; the Docker, ECR, Deploy and Verify stages are skipped; the live site still
    shows the previous version. The Test Result page names the failing test.
 4. Revert and push to recover.
 
@@ -324,7 +324,7 @@ In the EC2 console: **terminate** `jenkins-server`, then **Elastic IPs → Relea
 - **Verified deploys:** the pipeline only succeeds once the live URL reports the new version.
 - **Ansible in two roles:** configuration management (the Jenkins server's whole toolchain is
   defined in `jenkins-setup.yml`, so it can be rebuilt identically) and deployment automation
-  (`deploy.yml` templates and applies the Kubernetes manifests).
+  (`deploy.yml` fills in the image tag in `k8s/*.yaml` and applies them; `verify.yml` checks the rollout and the live URL).
 - **Known limitations:** tasks are stored in memory, so the app runs as 1 replica and data resets
   on each deploy; scaling out needs a shared database (e.g. Amazon RDS). Port 8080 is open to the
   internet for webhooks; production would restrict it to GitHub's webhook IP ranges and use HTTPS.

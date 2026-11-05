@@ -23,7 +23,7 @@ vpc:
 
 managedNodeGroups:
   - name: workers
-    instanceType: t3.medium
+    instanceType: m7i-flex.large
     desiredCapacity: 1
     minSize: 1
     maxSize: 2

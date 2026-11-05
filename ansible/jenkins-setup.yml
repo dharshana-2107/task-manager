@@ -48,6 +48,7 @@
         url: "{{ jenkins_key_url }}"
         dest: "{{ jenkins_keyring }}"
         mode: "0644"
+        force: true   # replace an old key file if Jenkins rotates keys again
 
     - name: Add Jenkins apt repository
       ansible.builtin.apt_repository:

@@ -1,0 +1,16 @@
+# Public endpoint: AWS creates a load balancer and gives it a DNS name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: task-manager
+  namespace: task-manager
+  labels:
+    app: task-manager
+spec:
+  type: LoadBalancer
+  selector:
+    app: task-manager
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

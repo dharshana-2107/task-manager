@@ -1,11 +1,10 @@
 ---
-# Deploys the task-manager image to Kubernetes and verifies the new version is live.
+# Deploys (or updates) task-manager on Kubernetes using the manifests in ../k8s/.
+# Ansible fills in the image tag and version, applies the manifests, and waits
+# until the new pod is running and ready.
 #
-# Run by the CI/CD pipeline:
+# Called by the Jenkinsfile's "Deploy to EKS (Ansible)" stage:
 #   ansible-playbook -i inventory.ini deploy.yml -e image=<registry/image:tag> -e app_version=<sha>
-# Called by the Jenkinsfile's "Deploy to EKS (Ansible)" stage.
-#
-# Uses whatever cluster the current kubeconfig points at (the pipeline sets this up).
 
 - name: Deploy task-manager to Kubernetes
   hosts: localhost
@@ -14,11 +13,7 @@
 
   vars:
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
-    namespace: task-manager
-    app_name: task-manager
-    # Keep at 1: tasks are stored in memory, so each pod would have its own separate list.
-    replicas: 1
-    container_port: 8080
+    manifests: "{{ playbook_dir }}/../k8s"
     rollout_timeout: 300
 
   pre_tasks:
@@ -33,52 +28,16 @@
     - name: Create namespace
       kubernetes.core.k8s:
         state: present
-        template: templates/namespace.yml.j2
+        template: "{{ manifests }}/namespace.yaml"
 
-    - name: Apply Deployment and wait for the rollout to finish
+    - name: Apply Deployment with the new image and wait for the rollout
       kubernetes.core.k8s:
         state: present
-        template: templates/deployment.yml.j2
+        template: "{{ manifests }}/deployment.yaml"
         wait: true
         wait_timeout: "{{ rollout_timeout }}"
 
     - name: Apply Service (public LoadBalancer)
       kubernetes.core.k8s:
         state: present
-        template: templates/service.yml.j2
-
-    - name: Wait for the LoadBalancer to get a public address
-      kubernetes.core.k8s_info:
-        kind: Service
-        name: "{{ app_name }}"
-        namespace: "{{ namespace }}"
-      register: svc
-      until: >-
-        svc.resources | length > 0 and
-        (svc.resources[0].status.loadBalancer.ingress | default([])) | length > 0
-      retries: 30
-      delay: 10
-
-    # AWS load balancers give a DNS hostname; some other clouds give an IP
-    - name: Record the public URL
-      ansible.builtin.set_fact:
-        app_url: >-
-          http://{{ svc.resources[0].status.loadBalancer.ingress[0].hostname
-          | default(svc.resources[0].status.loadBalancer.ingress[0].ip) }}
-
-    # A brand-new AWS load balancer can take a few minutes before its DNS name resolves
-    - name: Smoke test - the live app reports this commit's version
-      ansible.builtin.uri:
-        url: "{{ app_url }}/api/info"
-        return_content: true
-      register: info
-      until: >-
-        info.status == 200 and
-        info.json is defined and
-        (info.json.version | string) == (app_version | string)
-      retries: 60
-      delay: 10
-
-    - name: Show where the app is running
-      ansible.builtin.debug:
-        msg: "Version {{ app_version }} is live at {{ app_url }}"
+        template: "{{ manifests }}/service.yaml"

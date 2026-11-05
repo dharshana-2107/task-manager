@@ -15,8 +15,9 @@ phased AWS setup and demo steps.**
 ```
 Jenkinsfile                   Jenkins pipeline (build → test → image → ECR → deploy)
 ansible/jenkins-setup.yml     Ansible playbook that installs the Jenkins server's toolchain
-ansible/deploy.yml            Ansible playbook that deploys to Kubernetes and smoke-tests it
-ansible/templates/            Kubernetes manifests (Namespace, Deployment, Service) as Jinja2 templates
+ansible/deploy.yml            Ansible playbook that applies the Kubernetes manifests and waits for rollout
+ansible/verify.yml            Ansible playbook that checks pods are ready and the live URL serves the new version
+k8s/                          Kubernetes manifests: namespace.yaml, deployment.yaml, service.yaml
 eks/cluster.yaml              eksctl definition of the EKS cluster
 Dockerfile                    Runtime image built from the tested JAR
 src/                          Java source and tests

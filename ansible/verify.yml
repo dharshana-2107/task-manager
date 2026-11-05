@@ -1,0 +1,66 @@
+---
+# Verifies the deployment: the Deployment is fully ready, the Service has a public
+# address, and the live app reports the version that was just deployed.
+#
+# Called by the Jenkinsfile's "Verify Deployment" stage:
+#   ansible-playbook -i inventory.ini verify.yml -e app_version=<sha>
+
+- name: Verify task-manager deployment
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    namespace: task-manager
+    app_name: task-manager
+
+  tasks:
+    - name: Check the Deployment has all replicas ready
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        name: "{{ app_name }}"
+        namespace: "{{ namespace }}"
+      register: deploy
+      until: >-
+        deploy.resources | length > 0 and
+        (deploy.resources[0].status.readyReplicas | default(0)) ==
+        deploy.resources[0].spec.replicas
+      retries: 30
+      delay: 10
+
+    - name: Wait for the LoadBalancer to get a public address
+      kubernetes.core.k8s_info:
+        kind: Service
+        name: "{{ app_name }}"
+        namespace: "{{ namespace }}"
+      register: svc
+      until: >-
+        svc.resources | length > 0 and
+        (svc.resources[0].status.loadBalancer.ingress | default([])) | length > 0
+      retries: 30
+      delay: 10
+
+    # AWS load balancers give a DNS hostname; some other clouds give an IP
+    - name: Record the public URL
+      ansible.builtin.set_fact:
+        app_url: >-
+          http://{{ svc.resources[0].status.loadBalancer.ingress[0].hostname
+          | default(svc.resources[0].status.loadBalancer.ingress[0].ip) }}
+
+    # A brand-new AWS load balancer can take a few minutes before its DNS name resolves
+    - name: Smoke test - the live app reports this commit's version
+      ansible.builtin.uri:
+        url: "{{ app_url }}/api/info"
+        return_content: true
+      register: info
+      until: >-
+        info.status == 200 and
+        info.json is defined and
+        (info.json.version | string) == (app_version | string)
+      retries: 60
+      delay: 10
+
+    - name: Show where the app is running
+      ansible.builtin.debug:
+        msg: "Version {{ app_version }} is live at {{ app_url }}"

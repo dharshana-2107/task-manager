@@ -1,18 +1,24 @@
+# Kubernetes Deployment for the task-manager app.
+#
+# The image and app_version placeholders below are filled in by Ansible
+# (ansible/deploy.yml) on every pipeline run: the ECR image tagged with the
+# git commit, and that commit's short SHA.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ app_name }}
-  namespace: {{ namespace }}
+  name: task-manager
+  namespace: task-manager
   labels:
-    app: {{ app_name }}
+    app: task-manager
 spec:
-  replicas: {{ replicas }}
+  # Kept at 1: tasks are stored in memory, so each pod would have its own separate list.
+  replicas: 1
   selector:
     matchLabels:
-      app: {{ app_name }}
-  # Zero-downtime rollout: start the new pod first, remove the old one only
-  # once the new one passes its readiness check. If the new pod never becomes
-  # ready, the old one keeps serving and the deploy step fails.
+      app: task-manager
+  # Zero-downtime rollout: start the new pod first, remove the old one only once
+  # the new one passes its readiness check. If the new pod never becomes ready,
+  # the old one keeps serving and the pipeline fails.
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -21,14 +27,14 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ app_name }}
+        app: task-manager
         version: "{{ app_version }}"
     spec:
       containers:
-        - name: {{ app_name }}
-          image: {{ image }}
+        - name: task-manager
+          image: "{{ image }}"
           ports:
-            - containerPort: {{ container_port }}
+            - containerPort: 8080
           env:
             - name: APP_VERSION
               value: "{{ app_version }}"
@@ -40,21 +46,21 @@ spec:
               memory: 768Mi
             limits:
               memory: 768Mi
-          # Spring Boot can be slow to start on small CPU; allow up to 3 minutes
+          # Spring Boot can be slow to start; allow up to 3 minutes
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: {{ container_port }}
+              port: 8080
             periodSeconds: 5
             failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: {{ container_port }}
+              port: 8080
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: {{ container_port }}
+              port: 8080
             periodSeconds: 20
             failureThreshold: 3
