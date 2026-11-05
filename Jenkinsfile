@@ -1,5 +1,5 @@
 // CI/CD pipeline for task-manager.
-// GitHub push (webhook) -> Checkout -> Maven build -> Tests -> Docker image
+// GitHub push (webhook) -> Checkout -> Secret scan (Gitleaks) -> Maven build -> Tests -> Docker image
 // -> Amazon ECR -> Ansible deploy to Amazon EKS -> Verify.
 //
 // AWS access comes from the IAM role attached to the Jenkins EC2 instance,
@@ -44,14 +44,32 @@ pipeline {
             }
         }
 
-        stage('2. Build (Maven)') {
+        stage('2. Secret Scan (Gitleaks)') {
+            steps {
+                // Scans the full Git history for passwords, API keys and tokens.
+                // Any finding fails the build before anything is built or deployed.
+                sh '''
+                    docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+                      -v "$WORKSPACE:/repo" zricethezav/gitleaks:v8.18.4 \
+                      detect --source /repo --redact --verbose \
+                      --report-format json --report-path /repo/gitleaks-report.json
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('3. Build (Maven)') {
             steps {
                 // Compile and package the JAR; tests run in their own stage next
                 sh 'mvn -B clean package -DskipTests'
             }
         }
 
-        stage('3. Test (JUnit)') {
+        stage('4. Test (JUnit)') {
             steps {
                 // A failing test fails this stage, and every later stage is skipped
                 sh 'mvn -B test'
@@ -63,7 +81,7 @@ pipeline {
             }
         }
 
-        stage('4. Docker Build & Tag') {
+        stage('5. Docker Build & Tag') {
             steps {
                 // Packages the exact JAR that just passed the tests.
                 // Tagged with the commit SHA (traceable) and "latest".
@@ -75,7 +93,7 @@ pipeline {
             }
         }
 
-        stage('5. Push to ECR') {
+        stage('6. Push to ECR') {
             steps {
                 sh '''
                     aws ecr get-login-password --region "$AWS_REGION" \
@@ -86,7 +104,7 @@ pipeline {
             }
         }
 
-        stage('6. Deploy to EKS (Ansible)') {
+        stage('7. Deploy to EKS (Ansible)') {
             steps {
                 sh 'aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION" --kubeconfig "$KUBECONFIG"'
                 dir('ansible') {
@@ -99,7 +117,7 @@ pipeline {
             }
         }
 
-        stage('7. Verify Deployment') {
+        stage('8. Verify Deployment') {
             steps {
                 sh '''
                     kubectl rollout status deployment/task-manager -n "$NAMESPACE" --timeout=180s
