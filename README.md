@@ -37,7 +37,6 @@ mvn package               # build target/task-manager.jar (also runs tests)
 java -jar target/task-manager.jar
 ```
 
-Open http://localhost:8080
 
 ## Run with Docker
 
