@@ -30,22 +30,6 @@ phase until the checkpoint passes. Region used throughout: **ap-south-1 (Mumbai)
 | Deployment automation | Ansible: deploys to EKS + smoke test    | `ansible/deploy.yml`          |
 | CI/CD                 | Jenkins declarative pipeline            | `Jenkinsfile`                 |
 
-## Cost: read before starting
-
-None of this is in the AWS free tier. Approximate hourly cost while running:
-
-| Resource                         | ~USD/hour |
-|----------------------------------|-----------|
-| Jenkins EC2 (t3.medium)          | 0.045     |
-| EKS control plane                | 0.10      |
-| EKS worker node (t3.medium)      | 0.045     |
-| Load balancer                    | 0.03      |
-| Public IPv4 addresses (a few)    | 0.015     |
-| **Total with EKS running**       | **≈ 0.23 (≈ $5.5/day)** |
-
-The EKS cluster is the expensive part and is created late (Phase 4) on purpose. Plan to do
-Phases 4–7 in one or two sittings, then do Phase 8 (delete everything).
-
 ---
 
 ## Phase 0: Prepare the repo
