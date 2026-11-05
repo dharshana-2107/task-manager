@@ -46,7 +46,7 @@
       ansible.builtin.set_fact:
         app_url: >-
           http://{{ svc.resources[0].status.loadBalancer.ingress[0].hostname
-          | default(svc.resources[0].status.loadBalancer.ingress[0].ip) }}
+          | default(svc.resources[0].status.loadBalancer.ingress[0].ip) }}:{{ svc.resources[0].spec.ports[0].port }}
 
     # A brand-new AWS load balancer can take a few minutes before its DNS name resolves
     - name: Smoke test - the live app reports this commit's version
